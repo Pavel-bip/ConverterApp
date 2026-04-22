@@ -13,14 +13,22 @@ class CurrencyRepository(
 
     suspend fun fetchAndSaveCurrenciesFromApi() {
         val response = apiService.getCurrencies()
-        val currencies = response.Valute.map { (code, cbr) ->
-            Currency(code = code, rateToRub = cbr.Value / cbr.Nominal)
-        }
+
+        val allowedCodes = setOf("USD", "EUR", "CNY")
+        val currencies = response.Valute
+            .filter { (code, _) -> code in allowedCodes }
+            .map { (code, cbr) ->
+                Currency(code = code, rateToRub = cbr.Value / cbr.Nominal)
+            }
+            .toMutableList()
+
+        currencies.add(Currency(code = "RUB", rateToRub = 1.0))
+
         currencyDao.insertAll(currencies)
     }
 
     suspend fun updateCurrency(currency: Currency) {
-        currencyDao.insert(currency)  // Room с OnConflictStrategy.REPLACE обновит существующую запись
+        currencyDao.insert(currency)
     }
     suspend fun deleteCurrency(code: String) = currencyDao.deleteByCode(code)
 }

@@ -19,7 +19,6 @@ import com.github.mikephil.charting.data.Entry
 import com.github.mikephil.charting.data.LineData
 import com.github.mikephil.charting.data.LineDataSet
 import com.github.mikephil.charting.formatter.IndexAxisValueFormatter
-import com.example.converterapp.ui.screens.SimpleCurrencyDropdown
 @Composable
 fun AnalyticsScreen(viewModel: MainViewModel) {
     val currencies by viewModel.currencies.collectAsState()
@@ -44,11 +43,10 @@ fun AnalyticsScreen(viewModel: MainViewModel) {
             onSelect = { viewModel.selectAnalyticsCurrency(it) }
         )
 
-        // График — теперь занимает всё доступное пространство
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),  // Занимает всё свободное место
+                .weight(1f),
             elevation = CardDefaults.cardElevation(4.dp)
         ) {
             Box(
@@ -87,7 +85,7 @@ fun AnalyticsScreen(viewModel: MainViewModel) {
 @Composable
 fun LineChartView(chartData: ChartData) {
     AndroidView(
-        modifier = Modifier.fillMaxSize(),  // ← Важно! Занимает всё пространство родителя
+        modifier = Modifier.fillMaxSize(),
         factory = { context ->
             LineChart(context).apply {
                 description.isEnabled = false

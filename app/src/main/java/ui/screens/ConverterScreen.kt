@@ -83,7 +83,13 @@ fun ConverterScreen(viewModel: MainViewModel) {
                     },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                ) { Text("Быстрый пересчёт (последний курс)") }
+                ) {
+                    Text(
+                        text = "Быстрый пересчёт (последний курс)",
+                        fontSize = 13.sp,        // ← Уменьшенный шрифт
+                        maxLines = 1
+                    )
+                }
             }
         }
 
@@ -109,10 +115,14 @@ fun SimpleCurrencyDropdown(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("$label:", modifier = Modifier.width(40.dp))
+        Text(
+            "$label:",
+            modifier = Modifier.width(75.dp),
+            maxLines = 1
+        )
         Box(modifier = Modifier.weight(1f)) {
             Button(onClick = { expanded = true }) {
-                Text(selected?.code ?: "Выберите валюту")
+                Text(selected?.code ?: "Выберите валюту", maxLines = 1)
             }
             DropdownMenu(
                 expanded = expanded,

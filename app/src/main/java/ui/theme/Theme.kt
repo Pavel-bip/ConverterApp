@@ -4,6 +4,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import com.example.converterapp.ui.theme.ConverterAppTheme
 
 private val LightColors = lightColorScheme(
     primary = Color(0xFF2196F3),

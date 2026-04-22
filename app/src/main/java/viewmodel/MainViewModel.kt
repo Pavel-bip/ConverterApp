@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.net.UnknownHostException
 import java.util.Date
+import kotlin.text.Charsets
 
 class MainViewModel(
     private val currencyRepository: CurrencyRepository,
@@ -57,7 +58,8 @@ class MainViewModel(
     val chartData: StateFlow<ChartData?> = _chartData.asStateFlow()
 
     private var lastUsedRate = 0.0
-
+    private var lastUsedFromCurrency = "USD"
+    private var lastUsedToCurrency = "RUB"
     init {
         viewModelScope.launch {
             val currenciesList = currencyRepository.getAllCurrencies().first()
@@ -67,8 +69,13 @@ class MainViewModel(
         }
     }
 
-    fun updateAmount(value: String) { _amount.value = value }
-    fun updateNote(value: String) { _note.value = value }
+    fun updateAmount(value: String) {
+        _amount.value = value
+    }
+
+    fun updateNote(value: String) {
+        _note.value = value
+    }
 
     fun updateSearchQuery(value: String) {
         _searchQuery.value = value
@@ -100,15 +107,19 @@ class MainViewModel(
     fun loadCurrencies() {
         viewModelScope.launch {
             currencyRepository.getAllCurrencies().collect { list ->
-                _currencies.value = list
+                val allowedCodes = setOf("RUB", "USD", "EUR", "CNY")
+                val filteredList = list.filter { it.code in allowedCodes }
+                list.filter { it.code !in allowedCodes }.forEach { currency ->
+                    currencyRepository.deleteCurrency(currency.code)
+                }
 
-                // Обновляем выбранные валюты актуальными данными
-                _selectedFromCurrency.value = list.find { it.code == _selectedFromCurrency.value?.code }
-                    ?: list.find { it.code == "USD" } ?: list.firstOrNull()
-                _selectedToCurrency.value = list.find { it.code == _selectedToCurrency.value?.code }
-                    ?: list.find { it.code == "RUB" } ?: list.firstOrNull()
-                _selectedAnalyticsCurrency.value = list.find { it.code == _selectedAnalyticsCurrency.value?.code }
-                    ?: list.find { it.code == "USD" } ?: list.firstOrNull()
+                _currencies.value = filteredList
+                _selectedFromCurrency.value = filteredList.find { it.code == _selectedFromCurrency.value?.code }
+                    ?: filteredList.find { it.code == "USD" } ?: filteredList.firstOrNull()
+                _selectedToCurrency.value = filteredList.find { it.code == _selectedToCurrency.value?.code }
+                    ?: filteredList.find { it.code == "RUB" } ?: filteredList.firstOrNull()
+                _selectedAnalyticsCurrency.value = filteredList.find { it.code == _selectedAnalyticsCurrency.value?.code }
+                    ?: filteredList.find { it.code == "USD" } ?: filteredList.firstOrNull()
             }
         }
     }
@@ -125,7 +136,6 @@ class MainViewModel(
             onError("Дима, сумма не может быть отрицательной или равной нулю!")
             return
         }
-
         val from = _selectedFromCurrency.value
         val to = _selectedToCurrency.value
 
@@ -133,19 +143,18 @@ class MainViewModel(
             onError("Дима, одной из валют нет в базе!")
             return
         }
-
         if (from.rateToRub == 0.0) {
             onError("Дима, курс исходной валюты не может быть равен 0!")
             return
         }
-
         val fromRate = from.rateToRub
         val toRate = to.rateToRub
         val resultValue = amountValue * fromRate / toRate
         _result.value = "%.2f".format(resultValue)
 
         lastUsedRate = if (to.code == "RUB") fromRate else fromRate / toRate
-
+        lastUsedFromCurrency = from.code
+        lastUsedToCurrency = to.code
         viewModelScope.launch {
             historyRepository.saveConversion(
                 ConversionHistory(
@@ -163,7 +172,6 @@ class MainViewModel(
         onSuccess("Конвертация сохранена в историю!")
         _note.value = ""
     }
-
     fun quickConvert(onSuccess: (String) -> Unit, onError: (String) -> Unit) {
         if (lastUsedRate == 0.0) {
             onError("Сначала выполните хотя бы одну конвертацию!")
@@ -182,12 +190,12 @@ class MainViewModel(
             historyRepository.saveConversion(
                 ConversionHistory(
                     date = Date(),
-                    fromCurrency = _selectedFromCurrency.value?.code ?: "USD",
-                    toCurrency = "RUB",
+                    fromCurrency = lastUsedFromCurrency,
+                    toCurrency = lastUsedToCurrency,
                     amount = amountValue,
                     result = resultValue,
                     rate = lastUsedRate,
-                    note = "Быстрый пересчёт"
+                    note = _note.value.ifEmpty { null }
                 )
             )
             loadHistory()
@@ -197,7 +205,7 @@ class MainViewModel(
 
     suspend fun showAddCurrencyDialog(context: Context) {
         val editText = android.widget.EditText(context)
-        editText.hint = "Код валюты (USD)"
+        editText.hint = "Код валюты (USD, EUR, CNY)"
         android.app.AlertDialog.Builder(context)
             .setTitle("Добавить валюту")
             .setView(editText)
@@ -205,6 +213,10 @@ class MainViewModel(
                 val code = editText.text.toString().uppercase().trim()
                 if (code.isEmpty()) {
                     Toast.makeText(context, "Код валюты не может быть пустым", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                if (code !in setOf("USD", "EUR", "CNY")) {
+                    Toast.makeText(context, "Можно добавить только USD, EUR или CNY", Toast.LENGTH_LONG).show()
                     return@setPositiveButton
                 }
                 val rateEdit = android.widget.EditText(context)
@@ -235,7 +247,8 @@ class MainViewModel(
     suspend fun showEditCurrencyDialog(context: Context, currency: Currency) {
         val rateEdit = android.widget.EditText(context)
         rateEdit.hint = "Новый курс (текущий: ${currency.rateToRub})"
-        rateEdit.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+        rateEdit.inputType =
+            android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
         android.app.AlertDialog.Builder(context)
             .setTitle("Редактировать ${currency.code}")
             .setView(rateEdit)
@@ -246,16 +259,16 @@ class MainViewModel(
                     return@setPositiveButton
                 }
                 viewModelScope.launch {
-                    val updatedCurrency = currency.copy(rateToRub = rate, updatedDate = System.currentTimeMillis())
+                    val updatedCurrency =
+                        currency.copy(rateToRub = rate, updatedDate = System.currentTimeMillis())
                     currencyRepository.updateCurrency(updatedCurrency)
                     loadCurrencies()
-
-                    // Если это аналитическая валюта - обновляем аналитику
                     if (_selectedAnalyticsCurrency.value?.code == currency.code) {
                         loadAnalytics()
                     }
 
-                    Toast.makeText(context, "Курс ${currency.code} обновлён", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Курс ${currency.code} обновлён", Toast.LENGTH_SHORT)
+                        .show()
                 }
             }
             .setNegativeButton("Отмена", null)
@@ -273,16 +286,21 @@ class MainViewModel(
             currencyRepository.fetchAndSaveCurrenciesFromApi()
             loadCurrencies()
 
-            // Обновляем аналитику, если валюта выбрана
             if (_selectedAnalyticsCurrency.value != null) {
                 loadAnalytics()
             }
 
-            Toast.makeText(context, "Курсы успешно обновлены из API ЦБ РФ!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Курсы успешно обновлены из API ЦБ РФ!", Toast.LENGTH_SHORT)
+                .show()
         } catch (e: UnknownHostException) {
-            Toast.makeText(context, "Нет подключения к интернету. Проверьте сеть.", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                context,
+                "Нет подключения к интернету. Проверьте сеть.",
+                Toast.LENGTH_LONG
+            ).show()
         } catch (e: Exception) {
-            Toast.makeText(context, "Ошибка загрузки курсов. Попробуйте позже.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Ошибка загрузки курсов. Попробуйте позже.", Toast.LENGTH_LONG)
+                .show()
         }
     }
 
@@ -321,7 +339,12 @@ class MainViewModel(
         val statsList = stats.entries
             .sortedByDescending { it.value }
             .take(5)
-            .map { "${it.key}: ${it.value} раз (${it.value * 100.0 / total}%.1f)".replace(",", ".") }
+            .map {
+                "${it.key}: ${it.value} раз (${it.value * 100.0 / total}%.1f)".replace(
+                    ",",
+                    "."
+                )
+            }
         _statsText.value = "Частота использования валют:\n${statsList.joinToString("\n")}"
     }
 
@@ -339,12 +362,49 @@ class MainViewModel(
             Toast.makeText(context, "История пуста", Toast.LENGTH_SHORT).show()
             return
         }
-        val csv = StringBuilder("Дата;Из;В;Сумма;Результат;Курс;Заметка\n")
+
+        val csv = StringBuilder()
+        csv.append("\uFEFF")
+        csv.append("Дата;Из;В;Сумма;Результат;Курс;Заметка\n")
+
+        val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale("ru"))
+
         historyList.forEach { item ->
-            csv.append("${item.date};${item.fromCurrency};${item.toCurrency};${item.amount};${item.result};${item.rate};${item.note ?: ""}\n")
+            val date = dateFormat.format(item.date)
+            val from = item.fromCurrency
+            val to = item.toCurrency
+            val amount = "%.2f".format(item.amount).replace('.', ',')
+            val result = "%.2f".format(item.result).replace('.', ',')
+            val rate = "%.4f".format(item.rate).replace('.', ',')
+            val note = item.note?.replace(";", ",") ?: ""
+
+            csv.append("$date;$from;$to;$amount;$result;$rate;$note\n")
         }
-        val file = java.io.File(context.getExternalFilesDir(null), "history_${System.currentTimeMillis()}.csv")
-        file.writeText(csv.toString())
-        Toast.makeText(context, "Экспортировано в ${file.absolutePath}", Toast.LENGTH_LONG).show()
+
+        val fileName = "История_конвертаций_${System.currentTimeMillis()}.csv"
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            // Для Android 10+ используем MediaStore
+            val resolver = context.contentResolver
+            val contentValues = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "text/csv")
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOCUMENTS)
+            }
+            val uri = resolver.insert(android.provider.MediaStore.Files.getContentUri("external"), contentValues)
+            uri?.let {
+                resolver.openOutputStream(it)?.use { outputStream ->
+                    outputStream.write(csv.toString().toByteArray(Charsets.UTF_8))
+                }
+                Toast.makeText(context, "Экспортировано в папку Документы", Toast.LENGTH_LONG).show()
+            } ?: Toast.makeText(context, "Ошибка экспорта", Toast.LENGTH_SHORT).show()
+        } else {
+            // Для старых версий Android
+            val documentsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS)
+            if (!documentsDir.exists()) documentsDir.mkdirs()
+            val file = java.io.File(documentsDir, fileName)
+            file.writeText(csv.toString(), Charsets.UTF_8)
+            Toast.makeText(context, "Экспортировано в ${file.absolutePath}", Toast.LENGTH_LONG).show()
+        }
     }
 }
