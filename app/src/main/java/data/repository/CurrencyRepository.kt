@@ -12,8 +12,8 @@ class CurrencyRepository(
     fun getAllCurrencies(): Flow<List<Currency>> = currencyDao.getAllCurrencies()
 
     suspend fun fetchAndSaveCurrenciesFromApi() {
+        val startTime = System.currentTimeMillis()
         val response = apiService.getCurrencies()
-
         val allowedCodes = setOf("USD", "EUR", "CNY")
         val currencies = response.Valute
             .filter { (code, _) -> code in allowedCodes }
@@ -21,10 +21,10 @@ class CurrencyRepository(
                 Currency(code = code, rateToRub = cbr.Value / cbr.Nominal)
             }
             .toMutableList()
-
         currencies.add(Currency(code = "RUB", rateToRub = 1.0))
-
         currencyDao.insertAll(currencies)
+        val endTime = System.currentTimeMillis()
+        android.util.Log.d("Performance", "fetchAndSaveCurrenciesFromApi took ${endTime - startTime} ms")
     }
 
     suspend fun updateCurrency(currency: Currency) {

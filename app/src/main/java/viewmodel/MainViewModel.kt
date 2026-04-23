@@ -107,19 +107,13 @@ class MainViewModel(
     fun loadCurrencies() {
         viewModelScope.launch {
             currencyRepository.getAllCurrencies().collect { list ->
-                val allowedCodes = setOf("RUB", "USD", "EUR", "CNY")
-                val filteredList = list.filter { it.code in allowedCodes }
-                list.filter { it.code !in allowedCodes }.forEach { currency ->
-                    currencyRepository.deleteCurrency(currency.code)
-                }
-
-                _currencies.value = filteredList
-                _selectedFromCurrency.value = filteredList.find { it.code == _selectedFromCurrency.value?.code }
-                    ?: filteredList.find { it.code == "USD" } ?: filteredList.firstOrNull()
-                _selectedToCurrency.value = filteredList.find { it.code == _selectedToCurrency.value?.code }
-                    ?: filteredList.find { it.code == "RUB" } ?: filteredList.firstOrNull()
-                _selectedAnalyticsCurrency.value = filteredList.find { it.code == _selectedAnalyticsCurrency.value?.code }
-                    ?: filteredList.find { it.code == "USD" } ?: filteredList.firstOrNull()
+                _currencies.value = list
+                _selectedFromCurrency.value = list.find { it.code == _selectedFromCurrency.value?.code }
+                    ?: list.find { it.code == "USD" } ?: list.firstOrNull()
+                _selectedToCurrency.value = list.find { it.code == _selectedToCurrency.value?.code }
+                    ?: list.find { it.code == "RUB" } ?: list.firstOrNull()
+                _selectedAnalyticsCurrency.value = list.find { it.code == _selectedAnalyticsCurrency.value?.code }
+                    ?: list.find { it.code == "USD" } ?: list.firstOrNull()
             }
         }
     }
@@ -205,7 +199,7 @@ class MainViewModel(
 
     suspend fun showAddCurrencyDialog(context: Context) {
         val editText = android.widget.EditText(context)
-        editText.hint = "Код валюты (USD, EUR, CNY)"
+        editText.hint = "Код валюты (например, GBP)"
         android.app.AlertDialog.Builder(context)
             .setTitle("Добавить валюту")
             .setView(editText)
@@ -215,12 +209,8 @@ class MainViewModel(
                     Toast.makeText(context, "Код валюты не может быть пустым", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-                if (code !in setOf("USD", "EUR", "CNY")) {
-                    Toast.makeText(context, "Можно добавить только USD, EUR или CNY", Toast.LENGTH_LONG).show()
-                    return@setPositiveButton
-                }
                 val rateEdit = android.widget.EditText(context)
-                rateEdit.hint = "Курс к рублю (90.5)"
+                rateEdit.hint = "Курс к рублю (например, 120.5)"
                 rateEdit.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
                 android.app.AlertDialog.Builder(context)
                     .setTitle("Курс для $code")
